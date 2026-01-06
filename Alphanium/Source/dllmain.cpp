@@ -7,8 +7,8 @@
 
 LONG WINAPI CrashHandler(EXCEPTION_POINTERS* info) {
     LogMessage("Alphanium: unhandled exception 0x%08X at 0x%p",
-        info->ExceptionRecord->ExceptionCode,
-        info->ExceptionRecord->ExceptionAddress);
+               info->ExceptionRecord->ExceptionCode,
+               info->ExceptionRecord->ExceptionAddress);
     FlushLog();
     return EXCEPTION_EXECUTE_HANDLER;
 }
@@ -31,8 +31,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID) {
     if (ul_reason_for_call == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hModule);
         CreateThread(nullptr, 0, MainThread, nullptr, 0, nullptr);
-    }
-    else if (ul_reason_for_call == DLL_PROCESS_DETACH) {
+    } else if (ul_reason_for_call == DLL_PROCESS_DETACH) {
         StopStandaloneOverlay();
         ShutdownHooks();
     }

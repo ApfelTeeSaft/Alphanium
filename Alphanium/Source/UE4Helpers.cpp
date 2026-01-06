@@ -8,16 +8,16 @@
 UE4Globals g_ue4{};
 
 namespace {
-    bool IsLikelyNameEntry(const FNameEntry* entry) {
-        if (!IsReadableAddress(entry, sizeof(FNameEntry))) {
-            return false;
-        }
-        const char* name = entry->AnsiName;
-        if (!IsReadableAddress(name, 4)) {
-            return false;
-        }
-        return name[0] != '\0';
+bool IsLikelyNameEntry(const FNameEntry* entry) {
+    if (!IsReadableAddress(entry, sizeof(FNameEntry))) {
+        return false;
     }
+    const char* name = entry->AnsiName;
+    if (!IsReadableAddress(name, 4)) {
+        return false;
+    }
+    return name[0] != '\0';
+}
 }
 
 FNameEntry* GetNameEntry(int32_t index) {
@@ -49,15 +49,40 @@ FUObjectArray* GetGUObjectArray() {
     return nullptr;
 }
 
+UFortEngine* GetEngine() {
+    return reinterpret_cast<UFortEngine*>(FindObjectByName(L"FortEngine Transient.FortEngine_1"));
+}
+
 UWorld* GetWorld() {
-    if (!g_ue4.GWorld || !IsReadableAddress(reinterpret_cast<void*>(g_ue4.GWorld), sizeof(void*))) {
+    if (g_ue4.GWorld && IsReadableAddress(reinterpret_cast<void*>(g_ue4.GWorld), sizeof(void*))) {
+        auto worldPtr = *reinterpret_cast<UWorld**>(g_ue4.GWorld);
+        if (IsReadableAddress(worldPtr, sizeof(UWorld))) {
+            return worldPtr;
+        }
+    }
+    UFortEngine* engine = GetEngine();
+    if (!engine) {
+        LogMessage("GetWorld: FortEngine not found");
         return nullptr;
     }
-    auto worldPtr = *reinterpret_cast<UWorld**>(g_ue4.GWorld);
-    if (!IsReadableAddress(worldPtr, sizeof(UWorld))) {
+    if (!IsReadableAddress(engine, sizeof(UFortEngine))) {
+        LogMessage("GetWorld: FortEngine unreadable");
         return nullptr;
     }
-    return worldPtr;
+    if (!engine->GameViewport) {
+        LogMessage("GetWorld: GameViewport null");
+        return nullptr;
+    }
+    if (!IsReadableAddress(engine->GameViewport, sizeof(UGameViewportClient))) {
+        LogMessage("GetWorld: GameViewport unreadable");
+        return nullptr;
+    }
+    UWorld* world = engine->GameViewport->World;
+    if (!IsReadableAddress(world, sizeof(UWorld))) {
+        LogMessage("GetWorld: World unreadable from GameViewport");
+        return nullptr;
+    }
+    return world;
 }
 
 ProcessEventFn GetProcessEvent() {
@@ -69,6 +94,25 @@ StaticFindObjectFn GetStaticFindObject() {
 }
 
 std::string UObject::GetName() const {
+    if (g_ue4.AppendString && IsReadableAddress(reinterpret_cast<void*>(g_ue4.AppendString), 1)) {
+        struct FString {
+            wchar_t* Data;
+            int32_t Count;
+            int32_t Max;
+        } temp{};
+        std::wstring buffer(1024, L'\0');
+        temp.Data = buffer.data();
+        temp.Count = 0;
+        temp.Max = static_cast<int32_t>(buffer.size());
+        using AppendStringFn = void(__cdecl*)(const FName*, FString&);
+        auto fn = reinterpret_cast<AppendStringFn>(g_ue4.AppendString);
+        fn(&NamePrivate, temp);
+        if (temp.Count > 0) {
+            std::wstring ws(temp.Data, temp.Count);
+            std::string result(ws.begin(), ws.end());
+            return result;
+        }
+    }
     FNameEntry* entry = GetNameEntry(NamePrivate.ComparisonIndex);
     if (!entry) {
         return "None";
@@ -112,7 +156,7 @@ bool UObject::IsA(const UClass* cls) const {
 FVector AActor::GetActorLocation() const {
     auto* root = reinterpret_cast<const FVector*>(RootComponent);
     if (!root) {
-        return { 0.0f, 0.0f, 0.0f };
+        return {0.0f, 0.0f, 0.0f};
     }
     return *root;
 }
@@ -190,7 +234,7 @@ ACharacter* SpawnDefaultCharacter(const FVector& location) {
     } params{};
     params.Class = reinterpret_cast<UClass*>(characterClassObj);
     params.Location = location;
-    params.Rotation = { 0.0f, 0.0f, 0.0f };
+    params.Rotation = {0.0f, 0.0f, 0.0f};
     params.Owner = nullptr;
     params.Instigator = nullptr;
     params.bNoCollisionFail = true;
@@ -212,7 +256,7 @@ void PossessPawn(APlayerController* controller, APawn* pawn) {
     if (!possessFunc) {
         return;
     }
-    struct Params { APawn* Pawn; } params{ pawn };
+    struct Params { APawn* Pawn; } params{pawn};
     if (auto process = GetProcessEvent()) {
         process(reinterpret_cast<UObject*>(controller), possessFunc, &params);
     }
@@ -292,8 +336,7 @@ void ExecuteConsoleCommand(UObject* worldContext, const std::string& command) {
     if (auto process = GetProcessEvent()) {
         LogMessage("ExecuteConsoleCommand: '%s' (Kismet=%p Function=%p)", command.c_str(), kismetObj, func);
         process(kismetObj, func, &params);
-    }
-    else {
+    } else {
         LogMessage("ExecuteConsoleCommand: ProcessEvent not resolved");
     }
 }

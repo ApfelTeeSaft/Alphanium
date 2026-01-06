@@ -12,54 +12,54 @@
 #include <cstring>
 
 namespace {
-    Features g_features;
+Features g_features;
 
-    int32_t FindNameIndexByString(const std::string& name) {
-        auto* names = reinterpret_cast<FNameEntryArray*>(g_ue4.GNames);
-        if (!names || !names->Entries) {
-            return -1;
-        }
-        for (int32_t i = 0; i < 1024 * 1024; ++i) {
-            auto* entry = names->Entries[i];
-            if (!entry) {
-                continue;
-            }
-            if (name == entry->AnsiName) {
-                return i;
-            }
-        }
+int32_t FindNameIndexByString(const std::string& name) {
+    auto* names = reinterpret_cast<FNameEntryArray*>(g_ue4.GNames);
+    if (!names || !names->Entries) {
         return -1;
     }
-
-    void ConsoleCommand(APlayerController* controller, const std::string& command) {
-        if (!controller) {
-            return;
+    for (int32_t i = 0; i < 1024 * 1024; ++i) {
+        auto* entry = names->Entries[i];
+        if (!entry) {
+            continue;
         }
-        auto func = FindFunction(L"Function Engine.PlayerController.ConsoleCommand");
-        if (!func) {
-            return;
-        }
-        struct FString {
-            wchar_t* Data;
-            int32_t Count;
-            int32_t Max;
-        } cmd{};
-        std::wstring wide(command.begin(), command.end());
-        cmd.Data = const_cast<wchar_t*>(wide.c_str());
-        cmd.Count = static_cast<int32_t>(wide.size() + 1);
-        cmd.Max = cmd.Count;
-        struct Params {
-            FString Command;
-            bool bWriteToLog;
-            FString ReturnValue;
-        } params{};
-        params.Command = cmd;
-        params.bWriteToLog = false;
-
-        if (auto process = GetProcessEvent()) {
-            process(reinterpret_cast<UObject*>(controller), func, &params);
+        if (name == entry->AnsiName) {
+            return i;
         }
     }
+    return -1;
+}
+
+void ConsoleCommand(APlayerController* controller, const std::string& command) {
+    if (!controller) {
+        return;
+    }
+    auto func = FindFunction(L"Function Engine.PlayerController.ConsoleCommand");
+    if (!func) {
+        return;
+    }
+    struct FString {
+        wchar_t* Data;
+        int32_t Count;
+        int32_t Max;
+    } cmd{};
+    std::wstring wide(command.begin(), command.end());
+    cmd.Data = const_cast<wchar_t*>(wide.c_str());
+    cmd.Count = static_cast<int32_t>(wide.size() + 1);
+    cmd.Max = cmd.Count;
+    struct Params {
+        FString Command;
+        bool bWriteToLog;
+        FString ReturnValue;
+    } params{};
+    params.Command = cmd;
+    params.bWriteToLog = false;
+
+    if (auto process = GetProcessEvent()) {
+        process(reinterpret_cast<UObject*>(controller), func, &params);
+    }
+}
 }
 
 Features& GetFeatures() {
@@ -80,8 +80,8 @@ void Features::RenderUI() {
         return;
     }
 
-    ImGui::SetNextWindowSize({ 700.0f, 500.0f });
-    if (!ImGui::Begin("UE4 Utility")) {
+    ImGui::SetNextWindowSize({700.0f, 500.0f});
+    if (!ImGui::Begin("Alphanium")) {
         ImGui::End();
         return;
     }
@@ -207,10 +207,10 @@ void Features::RenderObjectsTab() {
 
     if (selectedActor_.Actor) {
         ImGui::Text("Selected: %s", selectedActor_.Actor->GetFullName().c_str());
-        float loc[3] = { selectedActor_.Location.X, selectedActor_.Location.Y, selectedActor_.Location.Z };
+        float loc[3] = {selectedActor_.Location.X, selectedActor_.Location.Y, selectedActor_.Location.Z};
         ImGui::InputFloat3("Location", loc);
         if (ImGui::Button("Apply Transform")) {
-            selectedActor_.Location = { loc[0], loc[1], loc[2] };
+            selectedActor_.Location = {loc[0], loc[1], loc[2]};
             SetActorLocation(selectedActor_.Actor, selectedActor_.Location);
         }
         if (ImGui::Button("Destroy")) {
@@ -235,9 +235,9 @@ void Features::RenderCheatsTab() {
     ImGui::Checkbox("Noclip", &noclip_);
     ImGui::Checkbox("Gravity", &gravity_);
     ImGui::SliderFloat("Walk Speed", &walkSpeedMultiplier_, 0.1f, 5.0f);
-    float tp[3] = { teleportTarget_.X, teleportTarget_.Y, teleportTarget_.Z };
+    float tp[3] = {teleportTarget_.X, teleportTarget_.Y, teleportTarget_.Z};
     ImGui::InputFloat3("Teleport Target", tp);
-    teleportTarget_ = { tp[0], tp[1], tp[2] };
+    teleportTarget_ = {tp[0], tp[1], tp[2]};
     if (ImGui::Button("Teleport")) {
         if (auto controller = GetLocalPlayerController()) {
             auto pawn = controller->AcknowledgedPawn;
@@ -273,12 +273,11 @@ void Features::QuickLoadMap(const std::string& mapName) {
         LogMessage("QuickLoadMap: PlayerController not found");
         return;
     }
-    FVector spawnLoc{ 0.0f, 0.0f, 300.0f };
+    FVector spawnLoc{0.0f, 0.0f, 300.0f};
     auto character = SpawnDefaultCharacter(spawnLoc);
     if (character) {
         PossessPawn(controller, reinterpret_cast<APawn*>(character));
-    }
-    else {
+    } else {
         LogMessage("QuickLoadMap: failed to spawn default character");
     }
 }
@@ -292,12 +291,12 @@ void Features::FullLoadMap(const std::string& mapName) {
     auto gameModeClass = FindObjectByName(L"Class Engine.GameMode");
     auto gameStateClass = FindObjectByName(L"Class Engine.GameState");
     if (gameModeClass) {
-        FVector loc{ 0.0f, 0.0f, 0.0f };
+        FVector loc{0.0f, 0.0f, 0.0f};
         auto gm = SpawnDefaultCharacter(loc);
         world->AuthorityGameMode = reinterpret_cast<AGameModeBase*>(gm);
     }
     if (gameStateClass) {
-        FVector loc{ 0.0f, 0.0f, 0.0f };
+        FVector loc{0.0f, 0.0f, 0.0f};
         auto gs = SpawnDefaultCharacter(loc);
         world->GameState = reinterpret_cast<AGameStateBase*>(gs);
     }
@@ -308,8 +307,7 @@ void Features::UnloadMap() {
     if (world) {
         LogMessage("UnloadMap: executing open /Engine/Maps/Entry");
         ExecuteConsoleCommand(world, "open /Engine/Maps/Entry");
-    }
-    else {
+    } else {
         LogMessage("UnloadMap: world is null");
     }
 }
@@ -338,8 +336,7 @@ void Features::ApplyMovementCheats() {
     }
     if (!gravity_) {
         ExecuteConsoleCommand(world, "setgravity 0");
-    }
-    else {
+    } else {
         ExecuteConsoleCommand(world, "setgravity 1");
     }
     if (walkSpeedMultiplier_ != 1.0f) {
@@ -368,7 +365,7 @@ void Features::SpawnHusk(bool withAI) {
     if (!spawnFunc) {
         return;
     }
-    FVector spawnLoc{ 0.0f, 0.0f, 300.0f };
+    FVector spawnLoc{0.0f, 0.0f, 300.0f};
     if (controller->AcknowledgedPawn) {
         spawnLoc = controller->AcknowledgedPawn->GetActorLocation();
         spawnLoc.X += 200.0f;
@@ -385,7 +382,7 @@ void Features::SpawnHusk(bool withAI) {
     } params{};
     params.Class = reinterpret_cast<UClass*>(huskClass);
     params.Location = spawnLoc;
-    params.Rotation = { 0.0f, 0.0f, 0.0f };
+    params.Rotation = {0.0f, 0.0f, 0.0f};
     params.bNoCollisionFail = true;
 
     if (auto process = GetProcessEvent()) {
@@ -403,7 +400,7 @@ void Features::SpawnHusk(bool withAI) {
     SpawnParams aiParams{};
     aiParams.Class = reinterpret_cast<UClass*>(aiClass);
     aiParams.Location = spawnLoc;
-    aiParams.Rotation = { 0.0f, 0.0f, 0.0f };
+    aiParams.Rotation = {0.0f, 0.0f, 0.0f};
     aiParams.bNoCollisionFail = true;
     if (auto process = GetProcessEvent()) {
         process(reinterpret_cast<UObject*>(world), spawnFunc, &aiParams);
@@ -414,7 +411,7 @@ void Features::SpawnHusk(bool withAI) {
     }
     auto possessFunc = FindFunction(L"Function Engine.Controller.Possess");
     if (possessFunc) {
-        struct PossessParams { APawn* Pawn; } possess{ reinterpret_cast<APawn*>(husk) };
+        struct PossessParams { APawn* Pawn; } possess{reinterpret_cast<APawn*>(husk)};
         if (auto process = GetProcessEvent()) {
             process(reinterpret_cast<UObject*>(ai), possessFunc, &possess);
         }
@@ -508,7 +505,7 @@ void Features::StartContentScan() {
             pendingMaps_.swap(found);
         }
         scanning_ = false;
-        });
+    });
     scanThread_.detach();
 }
 

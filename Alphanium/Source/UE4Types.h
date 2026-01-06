@@ -118,6 +118,22 @@ struct UWorld : UObject {
 struct AGameModeBase : AActor {};
 struct AGameStateBase : AActor {};
 
+struct UGameViewportClient : UObject {
+    char UnknownData00[0x58];
+    UWorld* World;
+};
+
+struct UEngine : UObject {
+    char UnknownData00[0x410];
+    UGameViewportClient* GameViewport;
+};
+
+struct UGameEngine : UEngine {
+    char UnknownData01[0x14C];
+};
+
+struct UFortEngine : UGameEngine {};
+
 struct FNameEntryArray {
     FNameEntry** Entries;
 };
@@ -134,4 +150,3 @@ struct FUObjectArray {
     int32_t MaxElements;
     int32_t NumElements;
 };
-

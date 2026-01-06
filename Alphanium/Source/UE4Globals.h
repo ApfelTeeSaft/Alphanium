@@ -8,6 +8,8 @@ struct UE4Globals {
     uintptr_t GWorld = 0;
     uintptr_t ProcessEvent = 0;
     uintptr_t StaticFindObject = 0;
+    uintptr_t AppendString = 0;
+    uint32_t ProcessEventIdx = 0;
 };
 
 extern UE4Globals g_ue4;

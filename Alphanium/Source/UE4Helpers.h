@@ -5,6 +5,7 @@ UObject* FindObjectByName(const std::wstring& name);
 UFunction* FindFunction(const std::wstring& name);
 
 APlayerController* GetLocalPlayerController();
+UFortEngine* GetEngine();
 ACharacter* SpawnDefaultCharacter(const FVector& location);
 void PossessPawn(APlayerController* controller, APawn* pawn);
 

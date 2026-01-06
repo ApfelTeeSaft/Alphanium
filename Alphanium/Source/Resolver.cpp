@@ -18,12 +18,15 @@ bool ResolveAllAddresses(std::string& log) {
     constexpr uintptr_t OFFSET_GWORLD = 48663532;
     constexpr uintptr_t OFFSET_PROCESSEVENT = 10133104;
     constexpr uintptr_t OFFSET_APPENDSTRING = 9483872;
+    constexpr uint32_t OFFSET_PROCESSEVENT_IDX = 52;
 
     g_ue4.GUObjectArray = module.base + OFFSET_GOBJECTS;
     g_ue4.GNames = module.base + OFFSET_GNAMES;
     g_ue4.GWorld = module.base + OFFSET_GWORLD;
     g_ue4.ProcessEvent = module.base + OFFSET_PROCESSEVENT;
     g_ue4.StaticFindObject = 0;
+    g_ue4.AppendString = module.base + OFFSET_APPENDSTRING;
+    g_ue4.ProcessEventIdx = OFFSET_PROCESSEVENT_IDX;
 
     if (!IsReadableAddress(reinterpret_cast<void*>(g_ue4.GNames), sizeof(void*))) {
         oss << "GNames address not readable, disabling.\n";
@@ -41,12 +44,17 @@ bool ResolveAllAddresses(std::string& log) {
         oss << "ProcessEvent address not readable, disabling.\n";
         g_ue4.ProcessEvent = 0;
     }
+    if (!IsReadableAddress(reinterpret_cast<void*>(g_ue4.AppendString), sizeof(void*))) {
+        oss << "AppendString address not readable, disabling.\n";
+        g_ue4.AppendString = 0;
+    }
 
     oss << "GNames (offset): 0x" << std::hex << g_ue4.GNames << "\n";
     oss << "GUObjectArray (offset): 0x" << std::hex << g_ue4.GUObjectArray << "\n";
     oss << "GWorld (offset): 0x" << std::hex << g_ue4.GWorld << "\n";
     oss << "ProcessEvent (offset): 0x" << std::hex << g_ue4.ProcessEvent << "\n";
     oss << "AppendString (offset): 0x" << std::hex << (module.base + OFFSET_APPENDSTRING) << "\n";
+    oss << "ProcessEventIdx (offset): 0x" << std::hex << g_ue4.ProcessEventIdx << "\n";
 
     log = oss.str();
     return g_ue4.ProcessEvent && g_ue4.GWorld;
