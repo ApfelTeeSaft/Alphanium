@@ -8,16 +8,16 @@
 UE4Globals g_ue4{};
 
 namespace {
-bool IsLikelyNameEntry(const FNameEntry* entry) {
-    if (!IsReadableAddress(entry, sizeof(FNameEntry))) {
-        return false;
+    bool IsLikelyNameEntry(const FNameEntry* entry) {
+        if (!IsReadableAddress(entry, sizeof(FNameEntry))) {
+            return false;
+        }
+        const char* name = entry->AnsiName;
+        if (!IsReadableAddress(name, 4)) {
+            return false;
+        }
+        return name[0] != '\0';
     }
-    const char* name = entry->AnsiName;
-    if (!IsReadableAddress(name, 4)) {
-        return false;
-    }
-    return name[0] != '\0';
-}
 }
 
 FNameEntry* GetNameEntry(int32_t index) {
@@ -50,7 +50,14 @@ FUObjectArray* GetGUObjectArray() {
 }
 
 UWorld* GetWorld() {
-    return g_ue4.GWorld ? *reinterpret_cast<UWorld**>(g_ue4.GWorld) : nullptr;
+    if (!g_ue4.GWorld || !IsReadableAddress(reinterpret_cast<void*>(g_ue4.GWorld), sizeof(void*))) {
+        return nullptr;
+    }
+    auto worldPtr = *reinterpret_cast<UWorld**>(g_ue4.GWorld);
+    if (!IsReadableAddress(worldPtr, sizeof(UWorld))) {
+        return nullptr;
+    }
+    return worldPtr;
 }
 
 ProcessEventFn GetProcessEvent() {
@@ -105,7 +112,7 @@ bool UObject::IsA(const UClass* cls) const {
 FVector AActor::GetActorLocation() const {
     auto* root = reinterpret_cast<const FVector*>(RootComponent);
     if (!root) {
-        return {0.0f, 0.0f, 0.0f};
+        return { 0.0f, 0.0f, 0.0f };
     }
     return *root;
 }
@@ -183,7 +190,7 @@ ACharacter* SpawnDefaultCharacter(const FVector& location) {
     } params{};
     params.Class = reinterpret_cast<UClass*>(characterClassObj);
     params.Location = location;
-    params.Rotation = {0.0f, 0.0f, 0.0f};
+    params.Rotation = { 0.0f, 0.0f, 0.0f };
     params.Owner = nullptr;
     params.Instigator = nullptr;
     params.bNoCollisionFail = true;
@@ -205,7 +212,7 @@ void PossessPawn(APlayerController* controller, APawn* pawn) {
     if (!possessFunc) {
         return;
     }
-    struct Params { APawn* Pawn; } params{pawn};
+    struct Params { APawn* Pawn; } params{ pawn };
     if (auto process = GetProcessEvent()) {
         process(reinterpret_cast<UObject*>(controller), possessFunc, &params);
     }
@@ -285,7 +292,8 @@ void ExecuteConsoleCommand(UObject* worldContext, const std::string& command) {
     if (auto process = GetProcessEvent()) {
         LogMessage("ExecuteConsoleCommand: '%s' (Kismet=%p Function=%p)", command.c_str(), kismetObj, func);
         process(kismetObj, func, &params);
-    } else {
+    }
+    else {
         LogMessage("ExecuteConsoleCommand: ProcessEvent not resolved");
     }
 }
