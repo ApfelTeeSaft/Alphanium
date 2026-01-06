@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source">
+      <UniqueIdentifier>{C5537E4F-E681-4036-98D8-5AEC30C061FF}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="external">
+      <UniqueIdentifier>{f3321c91-480c-46f8-b100-b833bc1e8ea3}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Source\Features.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Hooking.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\ImGuiLayer.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Logger.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Memory.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Resolver.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Strings.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\UE4Globals.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\UE4Types.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\UE4Helpers.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\StandaloneWindow.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Source\dllmain.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Features.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Hooking.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\ImGuiLayer.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Logger.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Memory.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Resolver.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Strings.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\UE4Helpers.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\StandaloneWindow.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\imgui\imgui_widgets.cpp">
+      <Filter>external</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\imgui\imgui.cpp">
+      <Filter>external</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\imgui\imgui_draw.cpp">
+      <Filter>external</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\imgui\imgui_tables.cpp">
+      <Filter>external</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\imgui\backends\imgui_impl_win32.cpp">
+      <Filter>external</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\imgui\backends\imgui_impl_dx9.cpp">
+      <Filter>external</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\MinHook\src\trampoline.c">
+      <Filter>external</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\MinHook\src\buffer.c">
+      <Filter>external</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\MinHook\src\hook.c">
+      <Filter>external</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\MinHook\src\hde\hde32.c">
+      <Filter>external</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>
