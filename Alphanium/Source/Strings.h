@@ -7,5 +7,6 @@ inline const std::vector<std::string> kMapNames = {
 };
 
 inline const std::vector<std::string> kWeaponIds = {
-    // Add weapon item definition names here, e.g. "WID_Assault_Auto_Athena_R_Ore_T03".
+    "Assault_Auto_T02",
+    "Assault_Burst_T04"
 };
