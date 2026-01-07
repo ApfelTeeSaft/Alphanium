@@ -19,21 +19,21 @@ bool ImGuiLayer::Initialize(IDirect3DDevice9* device) {
         LogMessage("ImGuiLayer::Initialize: device null");
         return false;
     }
-    device_ = device;
+    gameDevice_ = device;
     D3DDEVICE_CREATION_PARAMETERS params{};
-    if (FAILED(device_->GetCreationParameters(&params))) {
+    if (FAILED(gameDevice_->GetCreationParameters(&params))) {
         return false;
     }
-    hwnd_ = params.hFocusWindow;
+    gameHwnd_ = params.hFocusWindow;
     if (!contextInitialized_) {
         ImGui::CreateContext();
         contextInitialized_ = true;
     }
     if (!backendInitialized_) {
-        ImGui_ImplWin32_Init(hwnd_);
-        ImGui_ImplDX9_Init(device_);
+        ImGui_ImplWin32_Init(gameHwnd_);
+        ImGui_ImplDX9_Init(gameDevice_);
         backendInitialized_ = true;
-        LogMessage("ImGuiLayer::Initialize: backend initialized hwnd=%p device=%p", hwnd_, device_);
+        LogMessage("ImGuiLayer::Initialize: backend initialized hwnd=%p device=%p", gameHwnd_, gameDevice_);
     }
     threadedRender_ = false;
     return true;
@@ -44,7 +44,7 @@ bool ImGuiLayer::InitializeStandalone(HWND hwnd) {
         LogMessage("ImGuiLayer::InitializeStandalone: hwnd null");
         return false;
     }
-    hwnd_ = hwnd;
+    standaloneHwnd_ = hwnd;
     if (!contextInitialized_) {
         ImGui::CreateContext();
         contextInitialized_ = true;
@@ -57,17 +57,17 @@ bool ImGuiLayer::InitializeStandaloneDevice(HWND hwnd, IDirect3DDevice9* device)
         LogMessage("ImGuiLayer::InitializeStandaloneDevice: invalid hwnd/device hwnd=%p device=%p", hwnd, device);
         return false;
     }
-    hwnd_ = hwnd;
-    device_ = device;
+    standaloneHwnd_ = hwnd;
+    standaloneDevice_ = device;
     if (!contextInitialized_) {
         ImGui::CreateContext();
         contextInitialized_ = true;
     }
     if (!backendInitialized_) {
-        ImGui_ImplWin32_Init(hwnd_);
-        ImGui_ImplDX9_Init(device_);
+        ImGui_ImplWin32_Init(standaloneHwnd_);
+        ImGui_ImplDX9_Init(standaloneDevice_);
         backendInitialized_ = true;
-        LogMessage("ImGuiLayer::InitializeStandaloneDevice: backend initialized hwnd=%p device=%p", hwnd_, device_);
+        LogMessage("ImGuiLayer::InitializeStandaloneDevice: backend initialized hwnd=%p device=%p", standaloneHwnd_, standaloneDevice_);
     }
     threadedRender_ = false;
     return true;
@@ -87,8 +87,10 @@ void ImGuiLayer::Shutdown() {
         contextInitialized_ = false;
         LogMessage("ImGuiLayer::Shutdown: context destroyed");
     }
-    device_ = nullptr;
-    hwnd_ = nullptr;
+    gameDevice_ = nullptr;
+    gameHwnd_ = nullptr;
+    standaloneDevice_ = nullptr;
+    standaloneHwnd_ = nullptr;
 }
 
 void ImGuiLayer::RenderForPresent() {
@@ -100,7 +102,7 @@ void ImGuiLayer::RenderForEndScene() {
 }
 
 void ImGuiLayer::RenderStandalone() {
-    RenderInternal(false);
+    RenderInternal(standaloneDevice_, standaloneHwnd_, false);
 }
 
 void ImGuiLayer::StartRenderThread() {
@@ -123,7 +125,7 @@ void ImGuiLayer::StartRenderThread() {
                 frameRequested_ = false;
                 beginScene = nextBeginScene_;
             }
-            RenderInternal(beginScene);
+            RenderInternal(gameDevice_, gameHwnd_, beginScene);
         }
         LogMessage("ImGuiLayer::RenderThread: exiting");
     });
@@ -144,7 +146,7 @@ void ImGuiLayer::StopRenderThread() {
 
 void ImGuiLayer::RequestFrame(bool beginScene) {
     if (!threadedRender_) {
-        RenderInternal(beginScene);
+        RenderInternal(gameDevice_, gameHwnd_, beginScene);
         return;
     }
     if (!renderThreadRunning_.load()) {
@@ -158,14 +160,14 @@ void ImGuiLayer::RequestFrame(bool beginScene) {
     frameCv_.notify_one();
 }
 
-void ImGuiLayer::RenderInternal(bool beginScene) {
-    if (!device_ || !hwnd_) {
-        LogMessage("ImGuiLayer::RenderInternal: device/hwnd missing device=%p hwnd=%p", device_, hwnd_);
+void ImGuiLayer::RenderInternal(IDirect3DDevice9* device, HWND hwnd, bool beginScene) {
+    if (!device || !hwnd) {
+        LogMessage("ImGuiLayer::RenderInternal: device/hwnd missing device=%p hwnd=%p", device, hwnd);
         return;
     }
     const auto start = std::chrono::steady_clock::now();
     std::lock_guard<std::mutex> lock(renderMutex_);
-    if (beginScene && FAILED(device_->BeginScene())) {
+    if (beginScene && FAILED(device->BeginScene())) {
         LogMessage("ImGuiLayer::RenderInternal: BeginScene failed");
         return;
     }
@@ -176,7 +178,7 @@ void ImGuiLayer::RenderInternal(bool beginScene) {
     ImGui::Render();
     ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
     if (beginScene) {
-        device_->EndScene();
+        device->EndScene();
     }
     const auto end = std::chrono::steady_clock::now();
     if (lastRenderLog_ == std::chrono::steady_clock::time_point{}

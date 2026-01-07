@@ -39,7 +39,7 @@ private:
     void ReloadMap();
 
     void ApplyMovementCheats();
-    void SpawnHusk(bool withAI);
+    void SpawnHusk(const std::string& huskClassName, bool withAI);
     void SetupGameplay();
     void StartContentScan();
     void ProcessScanResults();

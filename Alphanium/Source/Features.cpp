@@ -295,11 +295,43 @@ void Features::RefreshActorCache() {
 
 void Features::RenderSpawningTab() {
     ImGui::Text("Husk Spawning:");
-    if (ImGui::Button("Spawn Husk (No AI / T-Pose)")) {
-        SpawnHusk(false);
-    }
-    if (ImGui::Button("Spawn Husk (With AI)")) {
-        SpawnHusk(true);
+    static const char* kHuskOptions[] = {
+        "WerewolfPawn_C",
+        "FlingerPawn_C",
+        "TakerPawn_C",
+        "TrollPawn_C",
+        "BlasterPawn_C",
+        "HuskPawn_Beehive_C",
+        "HuskPawn_Bombshell_Poison_C",
+        "HuskPawn_Bombshell_C",
+        "HuskPawn_Dwarf_Fire_C",
+        "HuskPawn_Dwarf_Ice_C",
+        "HuskPawn_Dwarf_Lightning_C",
+        "HuskPawn_Dwarf_C",
+        "HuskPawn_Fire_C",
+        "HuskPawn_Husky_Fire_C",
+        "HuskPawn_Husky_Ice_C",
+        "HuskPawn_Husky_Lightning_C",
+        "HuskPawn_Husky_C",
+        "HuskPawn_Ice_C",
+        "HuskPawn_Lightning_C",
+        "HuskPawn_Pitcher_C",
+        "HuskPawn_Sploder_C",
+        "HuskPawn_Trashman_C",
+        "HuskPawn_C",
+        "SmasherPawn_Boss_C",
+        "SmasherPawn_Fire_C",
+        "SmasherPawn_Ice_C",
+        "SmasherPawn_Lightning_C",
+        "SmasherPawn_C",
+        "SmasherPawn_BossRampage_C",
+    };
+    static int selectedHusk = 0;
+    ImGui::Combo("Husk Type", &selectedHusk, kHuskOptions, static_cast<int>(std::size(kHuskOptions)));
+    static bool withAI = true;
+    ImGui::Checkbox("With AI", &withAI);
+    if (ImGui::Button("Spawn Husk")) {
+        SpawnHusk(kHuskOptions[selectedHusk], withAI);
     }
 }
 
@@ -462,14 +494,19 @@ void Features::ProcessPendingCommands() {
     lastCommandRun_ = now;
 }
 
-void Features::SpawnHusk(bool withAI) {
+void Features::SpawnHusk(const std::string& huskClassName, bool withAI) {
     auto controller = GetLocalPlayerController();
     if (!controller) {
         return;
     }
-    SDK::UObject* huskClass = FindObjectByName(L"Class FortniteGame.FortAIPawn_Husk");
+    if (huskClassName.empty()) {
+        return;
+    }
+    std::wstring className(huskClassName.begin(), huskClassName.end());
+    std::wstring fullClassName = L"Class FortniteGame." + className;
+    SDK::UObject* huskClass = FindObjectByName(fullClassName);
     if (!huskClass) {
-        huskClass = FindObjectByName(L"Husk");
+        huskClass = FindObjectByName(className);
     }
     if (!huskClass) {
         return;
@@ -484,8 +521,12 @@ void Features::SpawnHusk(bool withAI) {
     }
     SDK::FVector spawnLoc{0.0f, 0.0f, 300.0f};
     if (controller->AcknowledgedPawn) {
-        spawnLoc = controller->AcknowledgedPawn->K2_GetActorLocation();
-        spawnLoc.X += 200.0f;
+        auto pawn = reinterpret_cast<SDK::AActor*>(controller->AcknowledgedPawn);
+        spawnLoc = pawn->K2_GetActorLocation();
+        SDK::FVector forward = pawn->GetActorForwardVector();
+        spawnLoc.X += forward.X * 10.0f;
+        spawnLoc.Y += forward.Y * 10.0f;
+        spawnLoc.Z += forward.Z * 10.0f;
     }
     struct SpawnParams {
         SDK::UClass* Class;

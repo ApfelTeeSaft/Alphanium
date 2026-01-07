@@ -22,10 +22,12 @@ private:
     void StartRenderThread();
     void StopRenderThread();
     void RequestFrame(bool beginScene);
-    void RenderInternal(bool beginScene);
+    void RenderInternal(IDirect3DDevice9* device, HWND hwnd, bool beginScene);
 
-    IDirect3DDevice9* device_ = nullptr;
-    HWND hwnd_ = nullptr;
+    IDirect3DDevice9* gameDevice_ = nullptr;
+    HWND gameHwnd_ = nullptr;
+    IDirect3DDevice9* standaloneDevice_ = nullptr;
+    HWND standaloneHwnd_ = nullptr;
     bool contextInitialized_ = false;
     bool backendInitialized_ = false;
     bool threadedRender_ = false;
