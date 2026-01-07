@@ -7,6 +7,6 @@ inline const std::vector<std::string> kMapNames = {
 };
 
 inline const std::vector<std::string> kWeaponIds = {
-    "Assault_Auto_T02",
-    "Assault_Burst_T04"
+    "WID_Assault_Auto_T02",
+    "WID_Assault_Burst_T04"
 };
