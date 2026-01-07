@@ -11,8 +11,6 @@
 
 ### Known Issues
 - Several features do not work as intended  
-- **Patterns are especially broken**  
-  - If anyone wants to fix them, feel free to do so 🙏
 
 ---
 
