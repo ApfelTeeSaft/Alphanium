@@ -54,8 +54,8 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;Alphanium_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir)Source;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Source;$(ProjectDir)..\CppSDK;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -71,8 +71,8 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;Alphanium_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir)Source;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Source;$(ProjectDir)..\CppSDK;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -89,13 +89,15 @@
     <ClInclude Include="Source\Logger.h" />
     <ClInclude Include="Source\Memory.h" />
     <ClInclude Include="Source\Resolver.h" />
+    <ClInclude Include="Source\SdkTypes.h" />
     <ClInclude Include="Source\Strings.h" />
-    <ClInclude Include="Source\UE4Globals.h" />
-    <ClInclude Include="Source\UE4Types.h" />
     <ClInclude Include="Source\UE4Helpers.h" />
     <ClInclude Include="Source\StandaloneWindow.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\CppSDK\SDK\Basic.cpp" />
+    <ClCompile Include="..\CppSDK\SDK\CoreUObject_functions.cpp" />
+    <ClCompile Include="..\CppSDK\SDK\Engine_functions.cpp" />
     <ClCompile Include="Source\dllmain.cpp" />
     <ClCompile Include="Source\Features.cpp" />
     <ClCompile Include="Source\Hooking.cpp" />

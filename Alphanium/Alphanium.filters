@@ -27,13 +27,10 @@
     <ClInclude Include="Source\Resolver.h">
       <Filter>Source</Filter>
     </ClInclude>
+    <ClInclude Include="Source\SdkTypes.h">
+      <Filter>Source</Filter>
+    </ClInclude>
     <ClInclude Include="Source\Strings.h">
-      <Filter>Source</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\UE4Globals.h">
-      <Filter>Source</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\UE4Types.h">
       <Filter>Source</Filter>
     </ClInclude>
     <ClInclude Include="Source\UE4Helpers.h">
@@ -73,6 +70,15 @@
     </ClCompile>
     <ClCompile Include="Source\StandaloneWindow.cpp">
       <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="..\CppSDK\SDK\Basic.cpp">
+      <Filter>external</Filter>
+    </ClCompile>
+    <ClCompile Include="..\CppSDK\SDK\CoreUObject_functions.cpp">
+      <Filter>external</Filter>
+    </ClCompile>
+    <ClCompile Include="..\CppSDK\SDK\Engine_functions.cpp">
+      <Filter>external</Filter>
     </ClCompile>
     <ClCompile Include="Source\imgui\imgui_widgets.cpp">
       <Filter>external</Filter>

@@ -1,14 +1,15 @@
 #pragma once
-#include "UE4Types.h"
+#include "SdkTypes.h"
 
-UObject* FindObjectByName(const std::wstring& name);
-UFunction* FindFunction(const std::wstring& name);
+SDK::UObject* FindObjectByName(const std::wstring& name);
+SDK::UFunction* FindFunction(const std::wstring& name);
 
-APlayerController* GetLocalPlayerController();
-UFortEngine* GetEngine();
-ACharacter* SpawnDefaultCharacter(const FVector& location);
-void PossessPawn(APlayerController* controller, APawn* pawn);
+SDK::APlayerController* GetLocalPlayerController();
+SDK::UFortEngine* GetEngine();
+SDK::UWorld* GetWorld();
+SDK::ACharacter* SpawnDefaultCharacter(const SDK::FVector& location);
+void PossessPawn(SDK::APlayerController* controller, SDK::APawn* pawn);
 
-void SetActorLocation(AActor* actor, const FVector& location);
-void DestroyActor(AActor* actor);
-void ExecuteConsoleCommand(UObject* worldContext, const std::string& command);
+void SetActorLocation(SDK::AActor* actor, const SDK::FVector& location);
+void DestroyActor(SDK::AActor* actor);
+void ExecuteConsoleCommand(SDK::UObject* worldContext, const std::string& command);

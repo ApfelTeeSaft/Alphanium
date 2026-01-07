@@ -1,213 +1,107 @@
 #include "UE4Helpers.h"
-#include "UE4Globals.h"
 #include "Memory.h"
 #include "Logger.h"
 #include <windows.h>
 #include <algorithm>
 
-UE4Globals g_ue4{};
-
 namespace {
-bool IsLikelyNameEntry(const FNameEntry* entry) {
-    if (!IsReadableAddress(entry, sizeof(FNameEntry))) {
-        return false;
-    }
-    const char* name = entry->AnsiName;
-    if (!IsReadableAddress(name, 4)) {
-        return false;
-    }
-    return name[0] != '\0';
-}
-}
-
-FNameEntry* GetNameEntry(int32_t index) {
-    if (!g_ue4.GNames) {
+SDK::TUObjectArray* GetObjectArray() {
+    auto* objects = SDK::UObject::GObjects.GetTypedPtr();
+    if (!objects) {
         return nullptr;
     }
-    auto names = reinterpret_cast<FNameEntryArray*>(g_ue4.GNames);
-    if (names && IsReadableAddress(names, sizeof(FNameEntryArray)) && names->Entries) {
-        return names->Entries[index];
-    }
-    auto direct = reinterpret_cast<FNameEntry**>(g_ue4.GNames);
-    if (IsReadableAddress(direct, sizeof(void*) * (index + 1))) {
-        auto entry = direct[index];
-        if (IsLikelyNameEntry(entry)) {
-            return entry;
-        }
-    }
-    return nullptr;
-}
-
-FUObjectArray* GetGUObjectArray() {
-    if (!g_ue4.GUObjectArray) {
+    if (!IsReadableAddress(objects, sizeof(SDK::TUObjectArray))) {
         return nullptr;
     }
-    auto arr = reinterpret_cast<FUObjectArray*>(g_ue4.GUObjectArray);
-    if (IsReadableAddress(arr, sizeof(FUObjectArray))) {
-        return arr;
-    }
-    return nullptr;
+    return objects;
 }
 
-UFortEngine* GetEngine() {
-    return reinterpret_cast<UFortEngine*>(FindObjectByName(L"FortEngine Transient.FortEngine_1"));
+std::string WideToUtf8(const std::wstring& input) {
+    if (input.empty()) {
+        return {};
+    }
+    int size = WideCharToMultiByte(CP_UTF8, 0, input.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    if (size <= 1) {
+        return {};
+    }
+    std::string output(static_cast<size_t>(size - 1), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, input.c_str(), -1, output.data(), size, nullptr, nullptr);
+    return output;
+}
 }
 
-UWorld* GetWorld() {
-    if (g_ue4.GWorld && IsReadableAddress(reinterpret_cast<void*>(g_ue4.GWorld), sizeof(void*))) {
-        auto worldPtr = *reinterpret_cast<UWorld**>(g_ue4.GWorld);
-        if (IsReadableAddress(worldPtr, sizeof(UWorld))) {
-            return worldPtr;
-        }
-    }
-    UFortEngine* engine = GetEngine();
+SDK::UFortEngine* GetEngine() {
+    return reinterpret_cast<SDK::UFortEngine*>(FindObjectByName(L"FortEngine Transient.FortEngine_1"));
+}
+
+SDK::UWorld* GetWorld() {
+    SDK::UEngine* engine = SDK::UEngine::GetEngine();
     if (!engine) {
-        LogMessage("GetWorld: FortEngine not found");
         return nullptr;
     }
-    if (!IsReadableAddress(engine, sizeof(UFortEngine))) {
-        LogMessage("GetWorld: FortEngine unreadable");
+    SDK::UGameViewportClient* viewport = engine->GameViewport;
+    if (!viewport) {
         return nullptr;
     }
-    if (!engine->GameViewport) {
-        LogMessage("GetWorld: GameViewport null");
-        return nullptr;
-    }
-    if (!IsReadableAddress(engine->GameViewport, sizeof(UGameViewportClient))) {
-        LogMessage("GetWorld: GameViewport unreadable");
-        return nullptr;
-    }
-    UWorld* world = engine->GameViewport->World;
-    if (!IsReadableAddress(world, sizeof(UWorld))) {
-        LogMessage("GetWorld: World unreadable from GameViewport");
-        return nullptr;
-    }
-    return world;
+    return viewport->World;
 }
 
-ProcessEventFn GetProcessEvent() {
-    return g_ue4.ProcessEvent ? reinterpret_cast<ProcessEventFn>(g_ue4.ProcessEvent) : nullptr;
-}
-
-StaticFindObjectFn GetStaticFindObject() {
-    return g_ue4.StaticFindObject ? reinterpret_cast<StaticFindObjectFn>(g_ue4.StaticFindObject) : nullptr;
-}
-
-std::string UObject::GetName() const {
-    if (g_ue4.AppendString && IsReadableAddress(reinterpret_cast<void*>(g_ue4.AppendString), 1)) {
-        struct FString {
-            wchar_t* Data;
-            int32_t Count;
-            int32_t Max;
-        } temp{};
-        std::wstring buffer(1024, L'\0');
-        temp.Data = buffer.data();
-        temp.Count = 0;
-        temp.Max = static_cast<int32_t>(buffer.size());
-        using AppendStringFn = void(__cdecl*)(const FName*, FString&);
-        auto fn = reinterpret_cast<AppendStringFn>(g_ue4.AppendString);
-        fn(&NamePrivate, temp);
-        if (temp.Count > 0) {
-            std::wstring ws(temp.Data, temp.Count);
-            std::string result(ws.begin(), ws.end());
-            return result;
+SDK::UObject* FindObjectByName(const std::wstring& name) {
+    const std::string query = WideToUtf8(name);
+    if (!query.empty()) {
+        if (auto exact = SDK::UObject::FindObject(query)) {
+            return exact;
         }
     }
-    FNameEntry* entry = GetNameEntry(NamePrivate.ComparisonIndex);
-    if (!entry) {
-        return "None";
-    }
-    return entry->AnsiName;
-}
-
-std::string UObject::GetFullName() const {
-    if (!ClassPrivate) {
-        return GetName();
-    }
-    std::string result = ClassPrivate->GetName();
-    result += " ";
-    const UObject* current = this;
-    std::string outerName;
-    while (current) {
-        outerName = current->GetName();
-        if (current->OuterPrivate) {
-            outerName = current->OuterPrivate->GetName() + "." + outerName;
-        }
-        break;
-    }
-    result += outerName;
-    return result;
-}
-
-bool UObject::IsA(const UClass* cls) const {
-    if (!cls) {
-        return false;
-    }
-    const UClass* current = ClassPrivate;
-    while (current) {
-        if (current == cls) {
-            return true;
-        }
-        current = current->SuperStruct ? reinterpret_cast<UClass*>(current->SuperStruct) : nullptr;
-    }
-    return false;
-}
-
-FVector AActor::GetActorLocation() const {
-    auto* root = reinterpret_cast<const FVector*>(RootComponent);
-    if (!root) {
-        return {0.0f, 0.0f, 0.0f};
-    }
-    return *root;
-}
-
-UObject* FindObjectByName(const std::wstring& name) {
-    if (auto fn = GetStaticFindObject()) {
-        return fn(nullptr, nullptr, name.c_str(), false);
-    }
-    auto* objects = GetGUObjectArray();
-    if (!objects || !objects->Objects) {
+    auto* objects = GetObjectArray();
+    if (!objects) {
         return nullptr;
     }
-    for (int32_t i = 0; i < objects->NumElements; ++i) {
-        auto& item = objects->Objects[i];
-        if (!item.Object) {
+    for (int32_t i = 0; i < objects->Num(); ++i) {
+        SDK::UObject* obj = objects->GetByIndex(i);
+        if (!obj) {
             continue;
         }
-        std::string full = item.Object->GetFullName();
-        std::wstring full_w(full.begin(), full.end());
-        if (full_w.find(name) != std::wstring::npos) {
-            return item.Object;
+        std::string full = obj->GetFullName();
+        if (!query.empty() && full.find(query) == std::string::npos) {
+            continue;
         }
+        if (query.empty()) {
+            std::wstring full_w(full.begin(), full.end());
+            if (full_w.find(name) == std::wstring::npos) {
+                continue;
+            }
+        }
+        return obj;
     }
     return nullptr;
 }
 
-UFunction* FindFunction(const std::wstring& name) {
+SDK::UFunction* FindFunction(const std::wstring& name) {
     auto obj = FindObjectByName(name);
-    return obj ? reinterpret_cast<UFunction*>(obj) : nullptr;
+    return obj ? reinterpret_cast<SDK::UFunction*>(obj) : nullptr;
 }
 
-APlayerController* GetLocalPlayerController() {
-    auto* objects = GetGUObjectArray();
-    if (!objects || !objects->Objects) {
+SDK::APlayerController* GetLocalPlayerController() {
+    auto* objects = GetObjectArray();
+    if (!objects) {
         return nullptr;
     }
-    for (int32_t i = 0; i < objects->NumElements; ++i) {
-        auto& item = objects->Objects[i];
-        if (!item.Object) {
+    for (int32_t i = 0; i < objects->Num(); ++i) {
+        SDK::UObject* obj = objects->GetByIndex(i);
+        if (!obj) {
             continue;
         }
-        std::string name = item.Object->GetFullName();
+        std::string name = obj->GetFullName();
         if (name.find("PlayerController") != std::string::npos) {
-            return reinterpret_cast<APlayerController*>(item.Object);
+            return reinterpret_cast<SDK::APlayerController*>(obj);
         }
     }
     return nullptr;
 }
 
-ACharacter* SpawnDefaultCharacter(const FVector& location) {
-    UWorld* world = GetWorld();
+SDK::ACharacter* SpawnDefaultCharacter(const SDK::FVector& location) {
+    SDK::UWorld* world = GetWorld();
     if (!world) {
         return nullptr;
     }
@@ -215,7 +109,7 @@ ACharacter* SpawnDefaultCharacter(const FVector& location) {
     if (!spawnFunc) {
         return nullptr;
     }
-    UObject* characterClassObj = FindObjectByName(L"Class Engine.Character");
+    SDK::UObject* characterClassObj = FindObjectByName(L"Class Engine.Character");
     if (!characterClassObj) {
         characterClassObj = FindObjectByName(L"Class Engine.DefaultPawn");
     }
@@ -223,16 +117,16 @@ ACharacter* SpawnDefaultCharacter(const FVector& location) {
         return nullptr;
     }
     struct SpawnParams {
-        UClass* Class;
-        FVector Location;
-        FRotator Rotation;
-        AActor* Owner;
-        APawn* Instigator;
+        SDK::UClass* Class;
+        SDK::FVector Location;
+        SDK::FRotator Rotation;
+        SDK::AActor* Owner;
+        SDK::APawn* Instigator;
         bool bNoCollisionFail;
         bool bRemoteOwned;
-        AActor* ReturnValue;
+        SDK::AActor* ReturnValue;
     } params{};
-    params.Class = reinterpret_cast<UClass*>(characterClassObj);
+    params.Class = reinterpret_cast<SDK::UClass*>(characterClassObj);
     params.Location = location;
     params.Rotation = {0.0f, 0.0f, 0.0f};
     params.Owner = nullptr;
@@ -241,14 +135,11 @@ ACharacter* SpawnDefaultCharacter(const FVector& location) {
     params.bRemoteOwned = false;
     params.ReturnValue = nullptr;
 
-    if (auto process = GetProcessEvent()) {
-        process(reinterpret_cast<UObject*>(world), spawnFunc, &params);
-        return reinterpret_cast<ACharacter*>(params.ReturnValue);
-    }
-    return nullptr;
+    world->ProcessEvent(spawnFunc, &params);
+    return reinterpret_cast<SDK::ACharacter*>(params.ReturnValue);
 }
 
-void PossessPawn(APlayerController* controller, APawn* pawn) {
+void PossessPawn(SDK::APlayerController* controller, SDK::APawn* pawn) {
     if (!controller || !pawn) {
         return;
     }
@@ -256,49 +147,25 @@ void PossessPawn(APlayerController* controller, APawn* pawn) {
     if (!possessFunc) {
         return;
     }
-    struct Params { APawn* Pawn; } params{pawn};
-    if (auto process = GetProcessEvent()) {
-        process(reinterpret_cast<UObject*>(controller), possessFunc, &params);
-    }
+    struct Params { SDK::APawn* Pawn; } params{pawn};
+    controller->ProcessEvent(possessFunc, &params);
 }
 
-void SetActorLocation(AActor* actor, const FVector& location) {
+void SetActorLocation(SDK::AActor* actor, const SDK::FVector& location) {
     if (!actor) {
         return;
     }
-    auto func = FindFunction(L"Function Engine.Actor.SetActorLocation");
-    if (!func) {
-        return;
-    }
-    struct Params {
-        FVector NewLocation;
-        bool bSweep;
-        void* SweepHitResult;
-        bool bTeleport;
-        bool ReturnValue;
-    } params{};
-    params.NewLocation = location;
-    params.bSweep = false;
-    params.bTeleport = true;
-    if (auto process = GetProcessEvent()) {
-        process(reinterpret_cast<UObject*>(actor), func, &params);
-    }
+    actor->K2_SetActorLocation(location, false, nullptr, true);
 }
 
-void DestroyActor(AActor* actor) {
+void DestroyActor(SDK::AActor* actor) {
     if (!actor) {
         return;
     }
-    auto func = FindFunction(L"Function Engine.Actor.K2_DestroyActor");
-    if (!func) {
-        return;
-    }
-    if (auto process = GetProcessEvent()) {
-        process(reinterpret_cast<UObject*>(actor), func, nullptr);
-    }
+    actor->K2_DestroyActor();
 }
 
-void ExecuteConsoleCommand(UObject* worldContext, const std::string& command) {
+void ExecuteConsoleCommand(SDK::UObject* worldContext, const std::string& command) {
     if (!worldContext) {
         LogMessage("ExecuteConsoleCommand: world context null for command '%s'", command.c_str());
         return;
@@ -308,7 +175,7 @@ void ExecuteConsoleCommand(UObject* worldContext, const std::string& command) {
         LogMessage("ExecuteConsoleCommand: KismetSystemLibrary.ExecuteConsoleCommand not found");
         return;
     }
-    UObject* kismetObj = FindObjectByName(L"Default__KismetSystemLibrary");
+    SDK::UObject* kismetObj = FindObjectByName(L"Default__KismetSystemLibrary");
     if (!kismetObj) {
         kismetObj = FindObjectByName(L"Class Engine.KismetSystemLibrary");
     }
@@ -316,27 +183,16 @@ void ExecuteConsoleCommand(UObject* worldContext, const std::string& command) {
         LogMessage("ExecuteConsoleCommand: KismetSystemLibrary object not found");
         return;
     }
-    struct FString {
-        wchar_t* Data;
-        int32_t Count;
-        int32_t Max;
-    } cmd{};
     std::wstring wide(command.begin(), command.end());
-    cmd.Data = const_cast<wchar_t*>(wide.c_str());
-    cmd.Count = static_cast<int32_t>(wide.size() + 1);
-    cmd.Max = cmd.Count;
+    SDK::FString cmd(wide.c_str());
     struct Params {
-        UObject* WorldContext;
-        FString Command;
-        APlayerController* SpecificPlayer;
+        SDK::UObject* WorldContext;
+        SDK::FString Command;
+        SDK::APlayerController* SpecificPlayer;
     } params{};
     params.WorldContext = worldContext;
     params.Command = cmd;
     params.SpecificPlayer = nullptr;
-    if (auto process = GetProcessEvent()) {
-        LogMessage("ExecuteConsoleCommand: '%s' (Kismet=%p Function=%p)", command.c_str(), kismetObj, func);
-        process(kismetObj, func, &params);
-    } else {
-        LogMessage("ExecuteConsoleCommand: ProcessEvent not resolved");
-    }
+    LogMessage("ExecuteConsoleCommand: '%s' (Kismet=%p Function=%p)", command.c_str(), kismetObj, func);
+    kismetObj->ProcessEvent(func, &params);
 }

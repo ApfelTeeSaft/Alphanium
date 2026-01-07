@@ -1,7 +1,7 @@
 #include "Hooking.h"
 #include "MinHook/include/MinHook.h"
 #include "ImGuiLayer.h"
-#include "UE4Globals.h"
+#include "SdkTypes.h"
 #include "Features.h"
 #include "Logger.h"
 #include <d3d9.h>
@@ -14,7 +14,7 @@ PresentFn g_originalPresent = nullptr;
 EndSceneFn g_originalEndScene = nullptr;
 void* g_presentTarget = nullptr;
 void* g_endSceneTarget = nullptr;
-using ProcessEventFnT = void(__thiscall*)(UObject*, UFunction*, void*);
+using ProcessEventFnT = void(__thiscall*)(SDK::UObject*, SDK::UFunction*, void*);
 ProcessEventFnT g_originalProcessEvent = nullptr;
 
 LRESULT CALLBACK DummyWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
@@ -39,7 +39,7 @@ HRESULT WINAPI PresentHook(IDirect3DDevice9* device, const RECT* src, const RECT
         initialized = true;
     }
     GetFeatures().Tick();
-    GetImGuiLayer().Render();
+    GetImGuiLayer().RenderForPresent();
     return g_originalPresent(device, src, dst, hwnd, dirty);
 }
 
@@ -51,11 +51,11 @@ HRESULT WINAPI EndSceneHook(IDirect3DDevice9* device) {
         initialized = true;
     }
     GetFeatures().Tick();
-    GetImGuiLayer().Render();
+    GetImGuiLayer().RenderForEndScene();
     return g_originalEndScene(device);
 }
 
-void __fastcall ProcessEventHook(UObject* obj, void*, UFunction* func, void* params) {
+void __fastcall ProcessEventHook(SDK::UObject* obj, void*, SDK::UFunction* func, void* params) {
     if (func) {
         std::string name = func->GetFullName();
         if (name.find("SpawnActor") != std::string::npos) {
@@ -115,18 +115,20 @@ bool InitializeHooks() {
     d3d->Release();
     DestroyWindow(hwnd);
 
-    if (g_ue4.ProcessEvent) {
-        g_originalProcessEvent = reinterpret_cast<ProcessEventFnT>(g_ue4.ProcessEvent);
-        MH_CreateHook(reinterpret_cast<void*>(g_ue4.ProcessEvent), reinterpret_cast<void*>(&ProcessEventHook), reinterpret_cast<void**>(&g_originalProcessEvent));
-        MH_EnableHook(reinterpret_cast<void*>(g_ue4.ProcessEvent));
+    const auto processEventAddr = SDK::InSDKUtils::GetImageBase() + SDK::Offsets::ProcessEvent;
+    if (processEventAddr) {
+        g_originalProcessEvent = reinterpret_cast<ProcessEventFnT>(processEventAddr);
+        MH_CreateHook(reinterpret_cast<void*>(processEventAddr), reinterpret_cast<void*>(&ProcessEventHook), reinterpret_cast<void**>(&g_originalProcessEvent));
+        MH_EnableHook(reinterpret_cast<void*>(processEventAddr));
     }
 
     return true;
 }
 
 void ShutdownHooks() {
-    if (g_ue4.ProcessEvent) {
-        MH_DisableHook(reinterpret_cast<void*>(g_ue4.ProcessEvent));
+    const auto processEventAddr = SDK::InSDKUtils::GetImageBase() + SDK::Offsets::ProcessEvent;
+    if (processEventAddr) {
+        MH_DisableHook(reinterpret_cast<void*>(processEventAddr));
     }
     if (g_endSceneTarget) {
         MH_DisableHook(g_endSceneTarget);

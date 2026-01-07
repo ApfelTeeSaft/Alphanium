@@ -1,5 +1,4 @@
 #include "Features.h"
-#include "UE4Globals.h"
 #include "UE4Helpers.h"
 #include "Strings.h"
 #include "imgui/imgui.h"
@@ -10,28 +9,12 @@
 #include <filesystem>
 #include <thread>
 #include <cstring>
+#include <cctype>
 
 namespace {
 Features g_features;
 
-int32_t FindNameIndexByString(const std::string& name) {
-    auto* names = reinterpret_cast<FNameEntryArray*>(g_ue4.GNames);
-    if (!names || !names->Entries) {
-        return -1;
-    }
-    for (int32_t i = 0; i < 1024 * 1024; ++i) {
-        auto* entry = names->Entries[i];
-        if (!entry) {
-            continue;
-        }
-        if (name == entry->AnsiName) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-void ConsoleCommand(APlayerController* controller, const std::string& command) {
+void ConsoleCommand(SDK::APlayerController* controller, const std::string& command) {
     if (!controller) {
         return;
     }
@@ -39,26 +22,17 @@ void ConsoleCommand(APlayerController* controller, const std::string& command) {
     if (!func) {
         return;
     }
-    struct FString {
-        wchar_t* Data;
-        int32_t Count;
-        int32_t Max;
-    } cmd{};
     std::wstring wide(command.begin(), command.end());
-    cmd.Data = const_cast<wchar_t*>(wide.c_str());
-    cmd.Count = static_cast<int32_t>(wide.size() + 1);
-    cmd.Max = cmd.Count;
+    SDK::FString cmd(wide.c_str());
     struct Params {
-        FString Command;
+        SDK::FString Command;
         bool bWriteToLog;
-        FString ReturnValue;
+        SDK::FString ReturnValue;
     } params{};
     params.Command = cmd;
     params.bWriteToLog = false;
 
-    if (auto process = GetProcessEvent()) {
-        process(reinterpret_cast<UObject*>(controller), func, &params);
-    }
+    controller->ProcessEvent(func, &params);
 }
 }
 
@@ -73,6 +47,7 @@ void Features::Initialize() {
 void Features::Tick() {
     ApplyMovementCheats();
     ProcessScanResults();
+    ProcessPendingCommands();
 }
 
 void Features::RenderUI() {
@@ -114,21 +89,61 @@ void Features::RenderUI() {
 }
 
 void Features::RenderMapsTab() {
-    ImGui::Text("Discovered Maps:");
-    ImGui::BeginChild("MapList", ImVec2(0.0f, 220.0f), true);
-    for (const auto& map : stringDump_.maps) {
-        bool selected = (selectedMap_ == map);
-        if (ImGui::Selectable(map.c_str(), selected)) {
-            selectedMap_ = map;
+    std::unordered_set<std::string> seen;
+    std::vector<const std::string*> allMaps;
+    allMaps.reserve(kMapNames.size() + scannedMaps_.size());
+    for (const auto& map : kMapNames) {
+        if (seen.insert(map).second) {
+            allMaps.push_back(&map);
         }
     }
     for (const auto& map : scannedMaps_) {
-        bool selected = (selectedMap_ == map);
-        if (ImGui::Selectable(map.c_str(), selected)) {
-            selectedMap_ = map;
+        if (seen.insert(map).second) {
+            allMaps.push_back(&map);
+        }
+    }
+
+    ImGui::InputText("Search", mapSearchBuffer_.data(), mapSearchBuffer_.size());
+    mapSearch_ = mapSearchBuffer_.data();
+
+    std::vector<const std::string*> filteredMaps;
+    const bool hasSearch = !mapSearch_.empty();
+    if (hasSearch) {
+        filteredMaps.reserve(allMaps.size());
+        std::string query = mapSearch_;
+        std::transform(query.begin(), query.end(), query.begin(), ::tolower);
+        for (const auto* map : allMaps) {
+            std::string name = *map;
+            std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+            if (name.find(query) != std::string::npos) {
+                filteredMaps.push_back(map);
+            }
+        }
+    }
+    std::vector<const std::string*> displayMaps = hasSearch ? filteredMaps : allMaps;
+    if (!hasSearch && mapDisplayLimit_ < displayMaps.size()) {
+        displayMaps.resize(mapDisplayLimit_);
+    }
+
+    ImGui::Text("Discovered Maps:");
+    ImGui::BeginChild("MapList", ImVec2(0.0f, 220.0f), true);
+    ImGuiListClipper clipper;
+    clipper.Begin(static_cast<int>(displayMaps.size()));
+    while (clipper.Step()) {
+        for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
+            const std::string& map = *displayMaps[i];
+            bool selected = (selectedMap_ == map);
+            if (ImGui::Selectable(map.c_str(), selected)) {
+                selectedMap_ = map;
+            }
         }
     }
     ImGui::EndChild();
+    if (!hasSearch && mapDisplayLimit_ < allMaps.size()) {
+        if (ImGui::Button("Load More")) {
+            mapDisplayLimit_ += 50;
+        }
+    }
     if (!selectedMap_.empty()) {
         ImGui::Text("Selected: %s", selectedMap_.c_str());
     }
@@ -147,61 +162,61 @@ void Features::RenderMapsTab() {
 }
 
 void Features::RenderObjectsTab() {
-    std::vector<AActor*> foundActors;
-    std::unordered_set<uintptr_t> seen;
+    if (ImGui::Button("Refresh Actors") || (autoRefreshActors_ && ShouldRefreshActors())) {
+        RefreshActorCache();
+    }
+    ImGui::SameLine();
+    ImGui::Checkbox("Auto Refresh", &autoRefreshActors_);
 
-    if (UWorld* world = GetWorld()) {
-        if (world->PersistentLevel) {
-            auto& actors = world->PersistentLevel->Actors;
-            for (int32_t i = 0; i < actors.Count; ++i) {
-                AActor* actor = actors[i];
-                if (actor && seen.insert(reinterpret_cast<uintptr_t>(actor)).second) {
-                    foundActors.push_back(actor);
-                }
-            }
-        }
-        for (int32_t l = 0; l < world->Levels.Count; ++l) {
-            ULevel* level = world->Levels[l];
-            if (!level) {
+    ImGui::InputText("Search Actors", actorSearchBuffer_.data(), actorSearchBuffer_.size());
+    actorSearch_ = actorSearchBuffer_.data();
+
+    std::vector<SDK::AActor*> displayActors;
+    const bool hasSearch = !actorSearch_.empty();
+    if (hasSearch) {
+        displayActors.reserve(cachedActors_.size());
+        std::string query = actorSearch_;
+        std::transform(query.begin(), query.end(), query.begin(), ::tolower);
+        for (auto* actor : cachedActors_) {
+            if (!actor) {
                 continue;
             }
-            auto& actors = level->Actors;
-            for (int32_t i = 0; i < actors.Count; ++i) {
-                AActor* actor = actors[i];
-                if (actor && seen.insert(reinterpret_cast<uintptr_t>(actor)).second) {
-                    foundActors.push_back(actor);
-                }
+            std::string name = actor->GetName();
+            std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+            if (name.find(query) != std::string::npos) {
+                displayActors.push_back(actor);
             }
+        }
+    } else {
+        displayActors = cachedActors_;
+        if (actorDisplayLimit_ < displayActors.size()) {
+            displayActors.resize(actorDisplayLimit_);
         }
     }
 
-    UClass* actorClass = reinterpret_cast<UClass*>(FindObjectByName(L"Class Engine.Actor"));
-    if (auto* objects = GetGUObjectArray()) {
-        for (int32_t i = 0; i < objects->NumElements; ++i) {
-            auto& item = objects->Objects[i];
-            if (!item.Object) {
+    ImGui::Text("Actors: %d", static_cast<int>(displayActors.size()));
+    ImGui::BeginChild("ActorList", ImVec2(0.0f, 260.0f), true);
+    ImGuiListClipper clipper;
+    clipper.Begin(static_cast<int>(displayActors.size()));
+    while (clipper.Step()) {
+        for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
+            SDK::AActor* actor = displayActors[i];
+            if (!actor) {
                 continue;
             }
-            UObject* obj = item.Object;
-            if (actorClass && !obj->IsA(actorClass)) {
-                continue;
+            std::string label = actor->GetName();
+            ImGui::PushID(reinterpret_cast<void*>(actor));
+            if (ImGui::Selectable(label.c_str(), selectedActor_.Actor == actor)) {
+                selectedActor_.Actor = actor;
+                selectedActor_.Location = actor->K2_GetActorLocation();
             }
-            AActor* actor = reinterpret_cast<AActor*>(obj);
-            if (seen.insert(reinterpret_cast<uintptr_t>(actor)).second) {
-                foundActors.push_back(actor);
-            }
+            ImGui::PopID();
         }
     }
-
-    ImGui::Text("Actors: %d", static_cast<int>(foundActors.size()));
-    for (auto* actor : foundActors) {
-        if (!actor) {
-            continue;
-        }
-        std::string label = actor->GetName();
-        if (ImGui::Button(label.c_str())) {
-            selectedActor_.Actor = actor;
-            selectedActor_.Location = actor->GetActorLocation();
+    ImGui::EndChild();
+    if (!hasSearch && actorDisplayLimit_ < cachedActors_.size()) {
+        if (ImGui::Button("Load More Actors")) {
+            actorDisplayLimit_ += 50;
         }
     }
 
@@ -218,6 +233,64 @@ void Features::RenderObjectsTab() {
             selectedActor_.Actor = nullptr;
         }
     }
+}
+
+bool Features::ShouldRefreshActors() const {
+    if (lastActorRefresh_ == std::chrono::steady_clock::time_point{}) {
+        return true;
+    }
+    return (std::chrono::steady_clock::now() - lastActorRefresh_) > std::chrono::seconds(1);
+}
+
+void Features::RefreshActorCache() {
+    std::vector<SDK::AActor*> foundActors;
+    std::unordered_set<uintptr_t> seen;
+
+    if (SDK::UWorld* world = GetWorld()) {
+        if (world->PersistentLevel) {
+            auto& actors = world->PersistentLevel->Actors;
+            for (int32_t i = 0; i < actors.Num(); ++i) {
+                SDK::AActor* actor = actors[i];
+                if (actor && seen.insert(reinterpret_cast<uintptr_t>(actor)).second) {
+                    foundActors.push_back(actor);
+                }
+            }
+        }
+        for (int32_t l = 0; l < world->Levels.Num(); ++l) {
+            SDK::ULevel* level = world->Levels[l];
+            if (!level) {
+                continue;
+            }
+            auto& actors = level->Actors;
+            for (int32_t i = 0; i < actors.Num(); ++i) {
+                SDK::AActor* actor = actors[i];
+                if (actor && seen.insert(reinterpret_cast<uintptr_t>(actor)).second) {
+                    foundActors.push_back(actor);
+                }
+            }
+        }
+    }
+
+    SDK::UClass* actorClass = reinterpret_cast<SDK::UClass*>(FindObjectByName(L"Class Engine.Actor"));
+    auto* objects = SDK::UObject::GObjects.GetTypedPtr();
+    if (objects) {
+        for (int32_t i = 0; i < objects->Num(); ++i) {
+            SDK::UObject* obj = objects->GetByIndex(i);
+            if (!obj) {
+                continue;
+            }
+            if (actorClass && !obj->IsA(actorClass)) {
+                continue;
+            }
+            SDK::AActor* actor = reinterpret_cast<SDK::AActor*>(obj);
+            if (seen.insert(reinterpret_cast<uintptr_t>(actor)).second) {
+                foundActors.push_back(actor);
+            }
+        }
+    }
+
+    cachedActors_ = std::move(foundActors);
+    lastActorRefresh_ = std::chrono::steady_clock::now();
 }
 
 void Features::RenderSpawningTab() {
@@ -242,7 +315,7 @@ void Features::RenderCheatsTab() {
         if (auto controller = GetLocalPlayerController()) {
             auto pawn = controller->AcknowledgedPawn;
             if (pawn) {
-                SetActorLocation(reinterpret_cast<AActor*>(pawn), teleportTarget_);
+                SetActorLocation(reinterpret_cast<SDK::AActor*>(pawn), teleportTarget_);
             }
         }
     }
@@ -259,7 +332,7 @@ void Features::QuickLoadMap(const std::string& mapName) {
     if (mapName.empty()) {
         return;
     }
-    UObject* world = reinterpret_cast<UObject*>(GetWorld());
+    SDK::UObject* world = reinterpret_cast<SDK::UObject*>(GetWorld());
     if (!world) {
         LogMessage("QuickLoadMap: world is null");
         return;
@@ -273,10 +346,10 @@ void Features::QuickLoadMap(const std::string& mapName) {
         LogMessage("QuickLoadMap: PlayerController not found");
         return;
     }
-    FVector spawnLoc{0.0f, 0.0f, 300.0f};
+    SDK::FVector spawnLoc{0.0f, 0.0f, 300.0f};
     auto character = SpawnDefaultCharacter(spawnLoc);
     if (character) {
-        PossessPawn(controller, reinterpret_cast<APawn*>(character));
+        PossessPawn(controller, reinterpret_cast<SDK::APawn*>(character));
     } else {
         LogMessage("QuickLoadMap: failed to spawn default character");
     }
@@ -284,26 +357,26 @@ void Features::QuickLoadMap(const std::string& mapName) {
 
 void Features::FullLoadMap(const std::string& mapName) {
     QuickLoadMap(mapName);
-    UWorld* world = GetWorld();
+    SDK::UWorld* world = GetWorld();
     if (!world) {
         return;
     }
     auto gameModeClass = FindObjectByName(L"Class Engine.GameMode");
     auto gameStateClass = FindObjectByName(L"Class Engine.GameState");
     if (gameModeClass) {
-        FVector loc{0.0f, 0.0f, 0.0f};
+        SDK::FVector loc{0.0f, 0.0f, 0.0f};
         auto gm = SpawnDefaultCharacter(loc);
-        world->AuthorityGameMode = reinterpret_cast<AGameModeBase*>(gm);
+        world->AuthorityGameMode = reinterpret_cast<SDK::AGameMode*>(gm);
     }
     if (gameStateClass) {
-        FVector loc{0.0f, 0.0f, 0.0f};
+        SDK::FVector loc{0.0f, 0.0f, 0.0f};
         auto gs = SpawnDefaultCharacter(loc);
-        world->GameState = reinterpret_cast<AGameStateBase*>(gs);
+        world->GameState = reinterpret_cast<SDK::AGameState*>(gs);
     }
 }
 
 void Features::UnloadMap() {
-    UObject* world = reinterpret_cast<UObject*>(GetWorld());
+    SDK::UObject* world = reinterpret_cast<SDK::UObject*>(GetWorld());
     if (world) {
         LogMessage("UnloadMap: executing open /Engine/Maps/Entry");
         ExecuteConsoleCommand(world, "open /Engine/Maps/Entry");
@@ -323,26 +396,70 @@ void Features::ApplyMovementCheats() {
     if (!controller) {
         return;
     }
-    UObject* world = reinterpret_cast<UObject*>(GetWorld());
+    SDK::UObject* world = reinterpret_cast<SDK::UObject*>(GetWorld());
     if (!world) {
         LogMessage("ApplyMovementCheats: world is null");
         return;
     }
+    const auto now = std::chrono::steady_clock::now();
+    const bool settingsChanged = fly_ != lastFly_
+        || noclip_ != lastNoclip_
+        || gravity_ != lastGravity_
+        || walkSpeedMultiplier_ != lastWalkSpeedMultiplier_;
+
+    if (!settingsChanged && lastCheatApply_ != std::chrono::steady_clock::time_point{}
+        && (now - lastCheatApply_) < std::chrono::milliseconds(500)) {
+        return;
+    }
+
     if (fly_) {
-        ExecuteConsoleCommand(world, "fly");
+        EnqueueCommand("fly");
     }
     if (noclip_) {
-        ExecuteConsoleCommand(world, "ghost");
+        EnqueueCommand("ghost");
     }
     if (!gravity_) {
-        ExecuteConsoleCommand(world, "setgravity 0");
+        EnqueueCommand("setgravity 0");
     } else {
-        ExecuteConsoleCommand(world, "setgravity 1");
+        EnqueueCommand("setgravity 1");
     }
     if (walkSpeedMultiplier_ != 1.0f) {
-        std::string cmd = "slomo " + std::to_string(walkSpeedMultiplier_);
-        ExecuteConsoleCommand(world, cmd);
+        EnqueueCommand("slomo " + std::to_string(walkSpeedMultiplier_));
     }
+    lastCheatApply_ = now;
+    lastFly_ = fly_;
+    lastNoclip_ = noclip_;
+    lastGravity_ = gravity_;
+    lastWalkSpeedMultiplier_ = walkSpeedMultiplier_;
+}
+
+void Features::EnqueueCommand(const std::string& command) {
+    if (command.empty()) {
+        return;
+    }
+    if (!pendingCommands_.empty() && pendingCommands_.back() == command) {
+        return;
+    }
+    pendingCommands_.push_back(command);
+}
+
+void Features::ProcessPendingCommands() {
+    if (pendingCommands_.empty()) {
+        return;
+    }
+    const auto now = std::chrono::steady_clock::now();
+    if (lastCommandRun_ != std::chrono::steady_clock::time_point{}
+        && (now - lastCommandRun_) < std::chrono::milliseconds(200)) {
+        return;
+    }
+    SDK::UObject* world = reinterpret_cast<SDK::UObject*>(GetWorld());
+    if (!world) {
+        return;
+    }
+    const std::string command = std::move(pendingCommands_.front());
+    pendingCommands_.pop_front();
+    ExecuteConsoleCommand(world, command);
+    lastCommandRun_ = now;
 }
 
 void Features::SpawnHusk(bool withAI) {
@@ -350,14 +467,14 @@ void Features::SpawnHusk(bool withAI) {
     if (!controller) {
         return;
     }
-    UObject* huskClass = FindObjectByName(L"Class FortniteGame.FortAIPawn_Husk");
+    SDK::UObject* huskClass = FindObjectByName(L"Class FortniteGame.FortAIPawn_Husk");
     if (!huskClass) {
         huskClass = FindObjectByName(L"Husk");
     }
     if (!huskClass) {
         return;
     }
-    UWorld* world = GetWorld();
+    SDK::UWorld* world = GetWorld();
     if (!world) {
         return;
     }
@@ -365,56 +482,50 @@ void Features::SpawnHusk(bool withAI) {
     if (!spawnFunc) {
         return;
     }
-    FVector spawnLoc{0.0f, 0.0f, 300.0f};
+    SDK::FVector spawnLoc{0.0f, 0.0f, 300.0f};
     if (controller->AcknowledgedPawn) {
-        spawnLoc = controller->AcknowledgedPawn->GetActorLocation();
+        spawnLoc = controller->AcknowledgedPawn->K2_GetActorLocation();
         spawnLoc.X += 200.0f;
     }
     struct SpawnParams {
-        UClass* Class;
-        FVector Location;
-        FRotator Rotation;
-        AActor* Owner;
-        APawn* Instigator;
+        SDK::UClass* Class;
+        SDK::FVector Location;
+        SDK::FRotator Rotation;
+        SDK::AActor* Owner;
+        SDK::APawn* Instigator;
         bool bNoCollisionFail;
         bool bRemoteOwned;
-        AActor* ReturnValue;
+        SDK::AActor* ReturnValue;
     } params{};
-    params.Class = reinterpret_cast<UClass*>(huskClass);
+    params.Class = reinterpret_cast<SDK::UClass*>(huskClass);
     params.Location = spawnLoc;
     params.Rotation = {0.0f, 0.0f, 0.0f};
     params.bNoCollisionFail = true;
 
-    if (auto process = GetProcessEvent()) {
-        process(reinterpret_cast<UObject*>(world), spawnFunc, &params);
-    }
-    AActor* husk = params.ReturnValue;
+    world->ProcessEvent(spawnFunc, &params);
+    SDK::AActor* husk = params.ReturnValue;
     if (!husk || !withAI) {
         return;
     }
 
-    UObject* aiClass = FindObjectByName(L"Class Engine.AIController");
+    SDK::UObject* aiClass = FindObjectByName(L"Class Engine.AIController");
     if (!aiClass) {
         return;
     }
     SpawnParams aiParams{};
-    aiParams.Class = reinterpret_cast<UClass*>(aiClass);
+    aiParams.Class = reinterpret_cast<SDK::UClass*>(aiClass);
     aiParams.Location = spawnLoc;
     aiParams.Rotation = {0.0f, 0.0f, 0.0f};
     aiParams.bNoCollisionFail = true;
-    if (auto process = GetProcessEvent()) {
-        process(reinterpret_cast<UObject*>(world), spawnFunc, &aiParams);
-    }
-    AActor* ai = aiParams.ReturnValue;
+    world->ProcessEvent(spawnFunc, &aiParams);
+    SDK::AActor* ai = aiParams.ReturnValue;
     if (!ai) {
         return;
     }
     auto possessFunc = FindFunction(L"Function Engine.Controller.Possess");
     if (possessFunc) {
-        struct PossessParams { APawn* Pawn; } possess{reinterpret_cast<APawn*>(husk)};
-        if (auto process = GetProcessEvent()) {
-            process(reinterpret_cast<UObject*>(ai), possessFunc, &possess);
-        }
+        struct PossessParams { SDK::APawn* Pawn; } possess{reinterpret_cast<SDK::APawn*>(husk)};
+        ai->ProcessEvent(possessFunc, &possess);
     }
 }
 
@@ -424,16 +535,16 @@ void Features::SetupGameplay() {
         return;
     }
     auto giveItemFunc = FindFunction(L"Function FortniteGame.FortPlayerController.GiveItem");
-    for (const auto& weapon : stringDump_.weapon_defs) {
+    for (const auto& weapon : kWeaponIds) {
         if (!giveItemFunc) {
             break;
         }
-        UObject* itemDef = FindObjectByName(std::wstring(weapon.begin(), weapon.end()));
+        SDK::UObject* itemDef = FindObjectByName(std::wstring(weapon.begin(), weapon.end()));
         if (!itemDef) {
             continue;
         }
         struct Params {
-            UObject* ItemDef;
+            SDK::UObject* ItemDef;
             int32_t Count;
             int32_t Level;
             bool bSilent;
@@ -442,16 +553,12 @@ void Features::SetupGameplay() {
         params.Count = 1;
         params.Level = 1;
         params.bSilent = true;
-        if (auto process = GetProcessEvent()) {
-            process(reinterpret_cast<UObject*>(controller), giveItemFunc, &params);
-        }
+        controller->ProcessEvent(giveItemFunc, &params);
     }
 
     auto buildFunc = FindFunction(L"Function FortniteGame.FortPlayerController.ToggleBuildMode");
     if (buildFunc) {
-        if (auto process = GetProcessEvent()) {
-            process(reinterpret_cast<UObject*>(controller), buildFunc, nullptr);
-        }
+        controller->ProcessEvent(buildFunc, nullptr);
     }
 }
 

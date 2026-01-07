@@ -1,6 +1,6 @@
 #include "Resolver.h"
 #include "Memory.h"
-#include "UE4Globals.h"
+#include "SdkTypes.h"
 #include <sstream>
 
 bool ResolveAllAddresses(std::string& log) {
@@ -13,49 +13,38 @@ bool ResolveAllAddresses(std::string& log) {
     }
     oss << "Module base: 0x" << std::hex << module.base << " size: 0x" << module.size << "\n";
 
-    constexpr uintptr_t OFFSET_GOBJECTS = 47987372;
-    constexpr uintptr_t OFFSET_GNAMES = 47957416;
-    constexpr uintptr_t OFFSET_GWORLD = 48663532;
-    constexpr uintptr_t OFFSET_PROCESSEVENT = 10133104;
-    constexpr uintptr_t OFFSET_APPENDSTRING = 9483872;
-    constexpr uint32_t OFFSET_PROCESSEVENT_IDX = 52;
+    const uintptr_t gObjects = module.base + SDK::Offsets::GObjects;
+    const uintptr_t gNames = module.base + SDK::Offsets::GNames;
+    const uintptr_t gWorld = module.base + SDK::Offsets::GWorld;
+    const uintptr_t processEvent = module.base + SDK::Offsets::ProcessEvent;
+    const uintptr_t appendString = module.base + SDK::Offsets::AppendString;
 
-    g_ue4.GUObjectArray = module.base + OFFSET_GOBJECTS;
-    g_ue4.GNames = module.base + OFFSET_GNAMES;
-    g_ue4.GWorld = module.base + OFFSET_GWORLD;
-    g_ue4.ProcessEvent = module.base + OFFSET_PROCESSEVENT;
-    g_ue4.StaticFindObject = 0;
-    g_ue4.AppendString = module.base + OFFSET_APPENDSTRING;
-    g_ue4.ProcessEventIdx = OFFSET_PROCESSEVENT_IDX;
+    SDK::UObject::GObjects.InitManually(reinterpret_cast<void*>(gObjects));
+    SDK::FName::InitManually(reinterpret_cast<void*>(appendString));
 
-    if (!IsReadableAddress(reinterpret_cast<void*>(g_ue4.GNames), sizeof(void*))) {
-        oss << "GNames address not readable, disabling.\n";
-        g_ue4.GNames = 0;
+    if (!IsReadableAddress(reinterpret_cast<void*>(gNames), sizeof(void*))) {
+        oss << "GNames address not readable.\n";
     }
-    if (!IsReadableAddress(reinterpret_cast<void*>(g_ue4.GUObjectArray), sizeof(void*))) {
-        oss << "GUObjectArray address not readable, disabling.\n";
-        g_ue4.GUObjectArray = 0;
+    if (!IsReadableAddress(reinterpret_cast<void*>(gObjects), sizeof(void*))) {
+        oss << "GUObjectArray address not readable.\n";
     }
-    if (!IsReadableAddress(reinterpret_cast<void*>(g_ue4.GWorld), sizeof(void*))) {
-        oss << "GWorld address not readable, disabling.\n";
-        g_ue4.GWorld = 0;
+    if (!IsReadableAddress(reinterpret_cast<void*>(gWorld), sizeof(void*))) {
+        oss << "GWorld address not readable.\n";
     }
-    if (!IsReadableAddress(reinterpret_cast<void*>(g_ue4.ProcessEvent), sizeof(void*))) {
-        oss << "ProcessEvent address not readable, disabling.\n";
-        g_ue4.ProcessEvent = 0;
+    if (!IsReadableAddress(reinterpret_cast<void*>(processEvent), sizeof(void*))) {
+        oss << "ProcessEvent address not readable.\n";
     }
-    if (!IsReadableAddress(reinterpret_cast<void*>(g_ue4.AppendString), sizeof(void*))) {
-        oss << "AppendString address not readable, disabling.\n";
-        g_ue4.AppendString = 0;
+    if (!IsReadableAddress(reinterpret_cast<void*>(appendString), sizeof(void*))) {
+        oss << "AppendString address not readable.\n";
     }
 
-    oss << "GNames (offset): 0x" << std::hex << g_ue4.GNames << "\n";
-    oss << "GUObjectArray (offset): 0x" << std::hex << g_ue4.GUObjectArray << "\n";
-    oss << "GWorld (offset): 0x" << std::hex << g_ue4.GWorld << "\n";
-    oss << "ProcessEvent (offset): 0x" << std::hex << g_ue4.ProcessEvent << "\n";
-    oss << "AppendString (offset): 0x" << std::hex << (module.base + OFFSET_APPENDSTRING) << "\n";
-    oss << "ProcessEventIdx (offset): 0x" << std::hex << g_ue4.ProcessEventIdx << "\n";
+    oss << "GNames (offset): 0x" << std::hex << gNames << "\n";
+    oss << "GUObjectArray (offset): 0x" << std::hex << gObjects << "\n";
+    oss << "GWorld (offset): 0x" << std::hex << gWorld << "\n";
+    oss << "ProcessEvent (offset): 0x" << std::hex << processEvent << "\n";
+    oss << "AppendString (offset): 0x" << std::hex << appendString << "\n";
+    oss << "ProcessEventIdx (offset): 0x" << std::hex << SDK::Offsets::ProcessEventIdx << "\n";
 
     log = oss.str();
-    return g_ue4.ProcessEvent && g_ue4.GWorld;
+    return processEvent != 0 && gWorld != 0;
 }

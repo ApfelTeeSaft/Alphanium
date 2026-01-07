@@ -4,12 +4,15 @@
 #include <thread>
 #include <mutex>
 #include <atomic>
-#include "UE4Types.h"
+#include <array>
+#include <chrono>
+#include <deque>
+#include "SdkTypes.h"
 #include "Strings.h"
 
 struct SelectedActorInfo {
-    AActor* Actor = nullptr;
-    FVector Location{0.0f, 0.0f, 0.0f};
+    SDK::AActor* Actor = nullptr;
+    SDK::FVector Location{0.0f, 0.0f, 0.0f};
 };
 
 class Features {
@@ -25,6 +28,11 @@ private:
     void RenderCheatsTab();
     void RenderGameplayTab();
 
+    void RefreshActorCache();
+    bool ShouldRefreshActors() const;
+    void EnqueueCommand(const std::string& command);
+    void ProcessPendingCommands();
+
     void QuickLoadMap(const std::string& mapName);
     void FullLoadMap(const std::string& mapName);
     void UnloadMap();
@@ -37,8 +45,10 @@ private:
     void ProcessScanResults();
     std::string BuildMapCommand(const std::string& mapName) const;
 
-    StringDump stringDump_;
     std::string selectedMap_;
+    std::string mapSearch_;
+    std::array<char, 128> mapSearchBuffer_{};
+    size_t mapDisplayLimit_ = 50;
     SelectedActorInfo selectedActor_;
     std::vector<std::string> scannedMaps_;
     std::vector<std::string> pendingMaps_;
@@ -46,12 +56,27 @@ private:
     std::mutex scanMutex_;
     std::atomic<bool> scanning_{false};
 
+    std::vector<SDK::AActor*> cachedActors_;
+    std::chrono::steady_clock::time_point lastActorRefresh_{};
+    bool autoRefreshActors_ = true;
+    std::string actorSearch_;
+    std::array<char, 128> actorSearchBuffer_{};
+    size_t actorDisplayLimit_ = 50;
+
+    std::chrono::steady_clock::time_point lastCheatApply_{};
+    bool lastFly_ = false;
+    bool lastNoclip_ = false;
+    bool lastGravity_ = true;
+    float lastWalkSpeedMultiplier_ = 1.0f;
+    std::deque<std::string> pendingCommands_;
+    std::chrono::steady_clock::time_point lastCommandRun_{};
+
     bool showMenu_ = true;
     bool fly_ = false;
     bool noclip_ = false;
     bool gravity_ = true;
     float walkSpeedMultiplier_ = 1.0f;
-    FVector teleportTarget_{0.0f, 0.0f, 0.0f};
+    SDK::FVector teleportTarget_{0.0f, 0.0f, 0.0f};
 };
 
 Features& GetFeatures();
