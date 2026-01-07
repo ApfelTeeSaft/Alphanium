@@ -7,6 +7,7 @@
 ## ⚠️ Important Notice
 
 > **This code is currently very broken.**
+> **Intended to be run on the Version with the uassets NOT the .pak one**
 
 ### Known Issues
 - Several features do not work as intended  
